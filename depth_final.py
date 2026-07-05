@@ -1,9 +1,9 @@
 import cv2
 import mediapipe as mp
-import pygame
+import pygame #rendering the animated character.
 import math
 import os
-import sys
+import sys #terminate program if assets are missing.
 
 # =========================
 # INIT
@@ -11,19 +11,20 @@ import sys
 
 pygame.init()
 
+#This creates the animation window.
 WIDTH, HEIGHT = 900, 700
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
-clock = pygame.time.Clock()
+clock = pygame.time.Clock() #frame rate
 
 # =========================
 # LOAD SPRITES
 # =========================
-
+#This finds the directory containing the Python file.
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ASSETS_DIR = os.path.join(BASE_DIR, "assets")
 
 def load(filename):
-    path = os.path.join(ASSETS_DIR, filename)
+    path = os.path.join(ASSETS_DIR, filename) #exit if an asset is missing
     if not os.path.exists(path):
         sys.exit(
             f"\nMissing asset: {path}\n"
@@ -32,7 +33,8 @@ def load(filename):
         )
     return pygame.image.load(path).convert_alpha()
 
-head = load("head.png")
+#load the images
+head = load("head.png") 
 torso = load("torso.png")
 
 upper_arm = load("upper_arm.png")
@@ -41,12 +43,18 @@ lower_arm = load("lower_arm.png")
 upper_leg = load("upper_leg.png")
 lower_leg = load("lower_leg.png")
 
+
+# Used to draw circular joints connecting limbs.
+
 ELBOW_COLOR = (235, 181, 145)
-KNEE_COLOR  = (52, 63, 96)
+KNEE_COLOR  = (52, 63, 96) 
 
 # =========================
 # MATH
 # =========================
+
+
+# New Position = 75% previous + 25% current
 
 def smooth_point(prev, new, alpha=0.75):
     if prev is None:
@@ -56,7 +64,7 @@ def smooth_point(prev, new, alpha=0.75):
         prev[1] * alpha + new[1] * (1 - alpha),
     )
 
-def smooth_val(prev, new, alpha=0.75):
+def smooth_val(prev, new, alpha=0.75):  # for z value
     if prev is None:
         return new
     return prev * alpha + new * (1 - alpha)
@@ -66,19 +74,22 @@ def smooth_val(prev, new, alpha=0.75):
 # =========================
 
 def draw_bone(img, start, end, thickness, pivot=(0.07, 0.5)):
-    dx = end[0] - start[0]
+    #It stretches the sprite between the two joints.
+
+    dx = end[0] - start[0] # direction
     dy = end[1] - start[1]
 
     length = math.hypot(dx, dy)
-    if length < 2:
+    if length < 2: 
         return
 
-    angle = math.degrees(math.atan2(dy, dx))
+    angle = math.degrees(math.atan2(dy, dx)) #calculate angle 
 
-    img_scaled = pygame.transform.scale(img, (int(length), int(thickness)))
-    rotated = pygame.transform.rotate(img_scaled, -angle)
+    img_scaled = pygame.transform.scale(img, (int(length), int(thickness))) # rescale
+    rotated = pygame.transform.rotate(img_scaled, -angle) #roatate (arm points towards the elbow)
 
-    pivot_x = pivot[0] * img_scaled.get_width()
+
+    pivot_x = pivot[0] * img_scaled.get_width()  # pivot correction
     pivot_y = pivot[1] * img_scaled.get_height()
 
     offset = pygame.math.Vector2(
@@ -91,17 +102,18 @@ def draw_bone(img, start, end, thickness, pivot=(0.07, 0.5)):
     screen.blit(rotated, rect)
 
 
+#Draws circles at elbows and knees.
 def draw_joint(pos, radius, color):
     pygame.draw.circle(screen, color, (int(pos[0]), int(pos[1])), int(radius))
 
 
-def draw_arm(shoulder, elbow, wrist, thickness):
+def draw_arm(shoulder, elbow, wrist, thickness): #draw arm
     draw_bone(upper_arm, shoulder, elbow, thickness)
     draw_bone(lower_arm, elbow, wrist, thickness)
     draw_joint(elbow, thickness * 0.42, ELBOW_COLOR)
 
 
-def draw_leg(hip, knee, ankle, thickness):
+def draw_leg(hip, knee, ankle, thickness): #draw leg
     draw_bone(upper_leg, hip, knee, thickness)
     draw_bone(lower_leg, knee, ankle, thickness)
     draw_joint(knee, thickness * 0.42, KNEE_COLOR)
@@ -110,7 +122,9 @@ def draw_leg(hip, knee, ankle, thickness):
 # MEDIAPIPE
 # =========================
 
-mp_pose = mp.solutions.pose
+#Creates the pose detection model.
+
+mp_pose = mp.solutions.pose 
 pose = mp_pose.Pose()
 
 cap = cv2.VideoCapture(0)
@@ -119,6 +133,7 @@ cap = cv2.VideoCapture(0)
 # SMOOTH MEMORY
 # =========================
 
+#store past poses
 mem = {}       # smoothed (x, y) screen positions
 mem_z = {}     # smoothed raw z depth values (per landmark)
 
@@ -138,6 +153,8 @@ def Z(i, z):
         mem_z[i] = smooth_val(mem_z[i], z)
     return mem_z[i]
 
+# now we get the smooth points
+
 # =========================
 # LOOP
 # =========================
@@ -154,11 +171,19 @@ while running:
     if not ret:
         continue
 
-    frame = cv2.flip(frame, 1)
-    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    frame = cv2.flip(frame, 1) #mirror image
+    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) #media pipe requires RGB
     res = pose.process(rgb)
 
-    screen.fill((20, 20, 20))
+    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+    frame = cv2.resize(frame, (WIDTH, HEIGHT))
+
+
+
+    surface = pygame.surfarray.make_surface(frame.swapaxes(0,1))
+
+    screen.blit(surface, (0,0))
 
     if res.pose_landmarks:
 
@@ -167,6 +192,9 @@ while running:
         # =========================
         # JOINTS (screen space)
         # =========================
+
+        # convert normalized coords intpo screen pixels
+
 
         ls = P(11, lm[11].x * WIDTH, lm[11].y * HEIGHT)
         rs = P(12, lm[12].x * WIDTH, lm[12].y * HEIGHT)
@@ -192,6 +220,8 @@ while running:
         # values are CLOSER to the camera.
         # =========================
 
+        # smaller z--> closer to camera
+
         z_ls, z_rs = Z(11, lm[11].z), Z(12, lm[12].z)
         z_le, z_re = Z(13, lm[13].z), Z(14, lm[14].z)
         z_lw, z_rw = Z(15, lm[15].z), Z(16, lm[16].z)
@@ -207,10 +237,13 @@ while running:
         # torso reference depth -- roughly the plane the torso sprite sits in
         torso_z = (z_ls + z_rs + z_lh + z_rh) / 4
 
-        shoulder_width = math.dist(ls, rs)
-        torso_height = math.dist(chest, hip)
+        # scale the torso accordingle
+        shoulder_width = math.dist(ls, rs)          # dist bw shoulders
+        torso_height = math.dist(chest, hip)        # dist bw chest and hip
 
         scale = shoulder_width / 150
+
+        #limb thickness
 
         arm_thickness = max(18, int(26 * scale))
         leg_thickness = max(20, int(32 * scale))

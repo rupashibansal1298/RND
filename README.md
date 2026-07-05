@@ -28,8 +28,9 @@ The repository contains multiple Python files, each representing a stage in the 
 first, download the required libraries and assets
 
 FOR THE BG screen:
-# screen.fill((30,30,30))__ 
+screen.fill((30,30,30))__ 
 this gives us the figure on a black bg, not the actual webcam feed
+
 
     #this gives us the feed view:
 
